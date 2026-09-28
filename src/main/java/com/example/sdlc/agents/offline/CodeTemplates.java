@@ -481,10 +481,13 @@ public final class CodeTemplates {
     // ------------------------------------------------------------------ helpers
 
     static String patch(String path, String content, String anchor, String replacement) {
-        if (!content.contains(anchor)) {
+        String lineEnding = content.contains("\r\n") ? "\r\n" : "\n";
+        String sourceAnchor = anchor.replace("\r\n", "\n").replace("\n", lineEnding);
+        String sourceReplacement = replacement.replace("\r\n", "\n").replace("\n", lineEnding);
+        if (!content.contains(sourceAnchor)) {
             throw new PatchConflictException(path, anchor);
         }
-        return content.replace(anchor, replacement);
+        return content.replace(sourceAnchor, sourceReplacement);
     }
 
     private static String require(Function<String, Optional<String>> fn, String key) {
