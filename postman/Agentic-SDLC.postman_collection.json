@@ -1,0 +1,1680 @@
+{
+  "info": {
+    "_postman_id": "40c258cb-5d6a-4533-befb-241284266bd3",
+    "name": "Agentic SDLC - URL Shortener",
+    "description": "Run top-to-bottom with the Collection Runner (order matters: later requests use run ids saved by earlier ones).\nStart the app first: ./mvnw spring-boot:run\nIMPORTANT: In Settings (or Runner) turn OFF 'Automatically follow redirects' so redirect tests see the 302.\n\nThe agents run on local Ollama models (see GET /api/v1/sdlc/agents). The content assertions in the scenario folders (exact task counts, files, plan versions) match the deterministic strategies. For fully reproducible runs, start the app with OLLAMA_ENABLED=false. With Ollama on, the same flows and gates run, but model-written content varies.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "alias",
+      "value": ""
+    },
+    {
+      "key": "greenRun",
+      "value": ""
+    },
+    {
+      "key": "brownRun",
+      "value": ""
+    },
+    {
+      "key": "ambRun",
+      "value": ""
+    },
+    {
+      "key": "brownPlanVersion",
+      "value": ""
+    },
+    {
+      "key": "abortRun",
+      "value": ""
+    },
+    {
+      "key": "stopRun",
+      "value": ""
+    }
+  ],
+  "protocolProfileBehavior": {
+    "followRedirects": false
+  },
+  "item": [
+    {
+      "name": "0. URL Shortener",
+      "item": [
+        {
+          "name": "Create short link (custom alias)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://spring.io/projects/spring-ai\",\n  \"alias\": \"{{alias}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alias\", \"pm-\" + Date.now().toString(36));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"alias honoured\", () => pm.expect(j.code).to.eql(pm.collectionVariables.get(\"alias\")));",
+                  "pm.test(\"Location header\", () => pm.response.to.have.header(\"Location\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create short link (random code, TTL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/docs\",\n  \"ttlSeconds\": 3600\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"7-char code\", () => pm.expect(j.code).to.have.lengthOf(7));",
+                  "pm.test(\"has expiry\", () => pm.expect(j.expiresAt).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redirect (turn OFF 'Automatically follow redirects' in settings)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{alias}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{alias}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 302\", () => pm.response.to.have.status(302));",
+                  "pm.test(\"redirects to target\", () => pm.expect(pm.response.headers.get(\"Location\")).to.eql(\"https://spring.io/projects/spring-ai\"));",
+                  "pm.test(\"no-store\", () => pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\"));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "Get link metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{alias}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{alias}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Click analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{alias}}/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{alias}}",
+                "stats"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"click counted\", () => pm.expect(pm.response.json().totalClicks).to.be.at.least(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject SSRF target (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"http://169.254.169.254/latest/meta-data\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"problem detail\", () => pm.expect(pm.response.json().detail).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject javascript: URL (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"javascript:alert(1)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate alias (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.org\",\n  \"alias\": \"{{alias}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown code (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/doesnotexist1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "doesnotexist1"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable link (204)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/urls/{{alias}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "urls",
+                "{{alias}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disabled link returns 410",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/{{alias}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "{{alias}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 410\", () => pm.response.to.have.status(410));"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Greenfield scenario",
+      "item": [
+        {
+          "name": "Start greenfield run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Build a new URL shortener service from scratch: create short links via a REST API, redirect by code, click analytics, optional link expiry and custom aliases.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"greenRun\", pm.response.json().runId);",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_RELEASE_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_RELEASE_APPROVAL\"));",
+                  "pm.test(\"classified GREENFIELD\", () => pm.expect(j.spec.changeType).to.eql(\"GREENFIELD\"));",
+                  "pm.test(\"validation passed\", () => pm.expect(j.validation.passed).to.be.true);",
+                  "pm.test(\"parallel branches ran\", () => [\"architecture_design\",\"risk_assessment\",\"test_strategy\"].forEach(n => pm.expect(j.executionPath.join()).to.include(n)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve release",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{greenRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{greenRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"release_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"release-manager\",\n  \"comment\": \"ship it\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is COMPLETED\", () => pm.expect(j.status).to.eql(\"COMPLETED\"));",
+                  "pm.test(\"published\", () => pm.expect(j.publishedTo).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Engineering summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{greenRun}}/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{greenRun}}",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"summary has validation section\", () => pm.expect(pm.response.text()).to.include(\"## 6. Validation\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit trail (hash chain verified)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{greenRun}}/audit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{greenRun}}",
+                "audit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"chain verified\", () => pm.expect(pm.response.json().chainVerified).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Brownfield scenario (retry + reject/re-plan)",
+      "item": [
+        {
+          "name": "Start brownfield run (inject 1 policy violation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Add an optional max-clicks limit to existing short links: once a link has been followed N times it must stop redirecting and return 410 Gone.\",\n  \"faults\": {\n    \"policy.implementation\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"brownRun\", pm.response.json().runId);",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_RELEASE_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_RELEASE_APPROVAL\"));",
+                  "pm.test(\"classified BROWNFIELD\", () => pm.expect(j.spec.changeType).to.eql(\"BROWNFIELD\"));",
+                  "pm.test(\"impact includes ShortUrl.java\", () => pm.expect(j.impact.components.map(c => c.path).join()).to.include(\"domain/ShortUrl.java\"));",
+                  "pm.test(\"schema change detected\", () => pm.expect(j.impact.schemaChanges).to.not.be.empty);",
+                  "pm.test(\"re-planned after impact analysis\", () => pm.expect(j.planVersion).to.be.at.least(2));",
+                  "pm.test(\"retried after violation\", () => pm.expect(j.implementationAttempts).to.eql(2));",
+                  "pm.test(\"V2 migration generated\", () => pm.expect(j.artifacts.map(a => a.path).join()).to.include(\"V2__add_max_clicks\"));",
+                  "pm.collectionVariables.set(\"brownPlanVersion\", j.planVersion);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "View generated ShortUrl.java",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{brownRun}}/artifact?path=src/main/java/com/example/shortener/domain/ShortUrl.java",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{brownRun}}",
+                "artifact"
+              ],
+              "query": [
+                {
+                  "key": "path",
+                  "value": "src/main/java/com/example/shortener/domain/ShortUrl.java"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"has maxClicks\", () => pm.expect(pm.response.text()).to.include(\"maxClicks\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unauthorised approver (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{brownRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{brownRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"release_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"intern\",\n  \"comment\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong gate (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{brownRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{brownRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"design_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"tech-lead\",\n  \"comment\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject release -> dynamic re-plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{brownRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{brownRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"release_approval\",\n  \"verdict\": \"REJECT\",\n  \"approver\": \"release-manager\",\n  \"comment\": \"Also return maxClicks in GET /api/v1/urls/{code}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_RELEASE_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_RELEASE_APPROVAL\"));",
+                  "pm.test(\"plan version increased\", () => pm.expect(j.planVersion).to.be.above(Number(pm.collectionVariables.get(\"brownPlanVersion\"))));",
+                  "pm.test(\"feedback became a task\", () => pm.expect(j.plan.tasks.map(t => t.title).join()).to.include(\"reviewer feedback\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve release",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{brownRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{brownRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"release_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"release-manager\",\n  \"comment\": \"ok\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is COMPLETED\", () => pm.expect(j.status).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Ambiguous scenario (clarify + high-risk design)",
+      "item": [
+        {
+          "name": "Start ambiguous run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Make the short links faster and more secure.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"ambRun\", pm.response.json().runId);",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_CLARIFICATION\", () => pm.expect(j.status).to.eql(\"AWAITING_CLARIFICATION\"));",
+                  "pm.test(\"asks about fast + secure\", () => { const ids = j.spec.ambiguities.map(a => a.id); pm.expect(ids).to.include(\"AMB-FAST\"); pm.expect(ids).to.include(\"AMB-SECURE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Answer clarifications",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{ambRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{ambRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"clarification_gate\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"tech-lead\",\n  \"comment\": \"answers\",\n  \"clarifications\": {\n    \"AMB-FAST\": \"p95 redirect latency under 20 ms at 500 requests/second by caching hot links in-process\",\n    \"AMB-SECURE\": \"block private-network (SSRF) targets and rate-limit link creation\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_DESIGN_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_DESIGN_APPROVAL\"));",
+                  "pm.test(\"risk is HIGH\", () => pm.expect(j.risk.overall).to.eql(\"HIGH\"));",
+                  "pm.test(\"existing capabilities detected\", () => pm.expect(j.impact.existingCapabilities).to.have.lengthOf(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve design",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{ambRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{ambRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"design_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"eng-manager\",\n  \"comment\": \"accept 30s staleness\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_RELEASE_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_RELEASE_APPROVAL\"));",
+                  "pm.test(\"cache decorator generated\", () => pm.expect(j.artifacts.map(a => a.path).join()).to.include(\"CachingShortUrlStore.java\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve release",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{ambRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{ambRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"release_approval\",\n  \"verdict\": \"APPROVE\",\n  \"approver\": \"release-manager\",\n  \"comment\": \"ship\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is COMPLETED\", () => pm.expect(j.status).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Engineering summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{ambRun}}/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{ambRun}}",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Failure paths & controls",
+      "item": [
+        {
+          "name": "Persistent violations -> rollback + safe-stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Add an optional max-clicks limit to existing short links: once a link has been followed N times it must stop redirecting and return 410 Gone.\",\n  \"faults\": {\n    \"policy.implementation\": 9\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is HALTED\", () => pm.expect(j.status).to.eql(\"HALTED\"));",
+                  "pm.test(\"3 bounded attempts\", () => pm.expect(j.implementationAttempts).to.eql(3));",
+                  "pm.test(\"rollback executed\", () => pm.expect(j.executionPath.join()).to.include(\"rollback\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transient agent failure -> retry + fallback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Build a new URL shortener service from scratch: create short links via a REST API, redirect by code, click analytics, optional link expiry and custom aliases.\",\n  \"faults\": {\n    \"transient.planning\": 5\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_RELEASE_APPROVAL\", () => pm.expect(j.status).to.eql(\"AWAITING_RELEASE_APPROVAL\"));",
+                  "pm.test(\"planning fell back\", () => pm.expect(j.decisions.map(d => d.actor).join()).to.include(\"planning/fallback\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start run to abort",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Make the short links faster and more secure.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"abortRun\", pm.response.json().runId);",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is AWAITING_CLARIFICATION\", () => pm.expect(j.status).to.eql(\"AWAITING_CLARIFICATION\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abort at clarification -> HALTED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{abortRun}}/decisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{abortRun}}",
+                "decisions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate\": \"clarification_gate\",\n  \"verdict\": \"ABORT\",\n  \"approver\": \"tech-lead\",\n  \"comment\": \"out of scope\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is HALTED\", () => pm.expect(j.status).to.eql(\"HALTED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start run to stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"Make the short links faster and more secure.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"stopRun\", pm.response.json().runId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kill switch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/{{stopRun}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "{{stopRun}}",
+                "stop"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"operator test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"run status is HALTED\", () => pm.expect(j.status).to.eql(\"HALTED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown run (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs",
+                "does-not-exist"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Blank requirement (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requirement\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Observability",
+      "item": [
+        {
+          "name": "Multi-agent roster (Ollama models per agent)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/agents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "agents"
+              ]
+            },
+            "description": "Which Ollama model serves each agent, whether Ollama is reachable, which models are missing (with the ollama pull commands) and per-agent LLM call stats."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"Ollama provider\", () => pm.expect(b.provider).to.eql(\"ollama\"));",
+                  "pm.test(\"8 LLM agents, each with a model\", () => { pm.expect(b.agents).to.have.length(8); b.agents.forEach(a => pm.expect(a.model).to.be.a('string')); });",
+                  "pm.test(\"implementation uses the coder model\", () => pm.expect(b.agents.find(a => a.agent === 'implementation').model).to.include('coder'));",
+                  "console.log('Ollama reachable:', b.ollama.reachable, 'missing:', b.ollama.missingModels);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List runs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "runs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reliability metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "metrics"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json();",
+                  "pm.test(\"has success rate + MTTR\", () => { pm.expect(m).to.have.property(\"successRate\"); pm.expect(m).to.have.property(\"mttrMs\"); });",
+                  "pm.test(\"rollbacks recorded\", () => pm.expect(m.rollbacks).to.be.at.least(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Graph (Mermaid)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sdlc/graph",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sdlc",
+                "graph"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"contains gates\", () => pm.expect(pm.response.text()).to.include(\"release_approval\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

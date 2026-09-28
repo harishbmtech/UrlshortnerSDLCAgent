@@ -1,0 +1,20 @@
+{
+  "runsStarted": 4,
+  "runsCompleted": 3,
+  "runsHalted": 1,
+  "runsFailed": 0,
+  "successRate": 0.75,
+  "nodeExecutions": 73,
+  "nodeFailures": 0,
+  "retries": 0,
+  "fallbacks": 0,
+  "rollbacks": 1,
+  "validationFailures": 4,
+  "replans": 6,
+  "humanApprovals": 5,
+  "humanRejections": 1,
+  "mttrMs": 82.0,
+  "avgEndToEndLatencyMs": 487.0,
+  "p95EndToEndLatencyMs": 789.0,
+  "avgAgentProcessingMs": 403.33
+}
