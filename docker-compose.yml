@@ -1,0 +1,44 @@
+# One command: Ollama + the two agent models + the app.
+#   docker compose up --build
+# The first start downloads ~9 GB of models into the `ollama` volume. Later starts reuse them.
+# On a Mac, Docker cannot use the Apple GPU, so running Ollama natively is much faster (see README).
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    environment:
+      OLLAMA_KEEP_ALIVE: 10m
+      OLLAMA_MAX_LOADED_MODELS: "2"          # reasoning + coder model stay loaded together
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 30
+    # NVIDIA GPU (Linux): uncomment
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama: { condition: service_healthy }
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c",
+                 "ollama pull ${OLLAMA_REASONING_MODEL:-llama3.1:8b} && ollama pull ${OLLAMA_CODER_MODEL:-qwen2.5-coder:7b}"]
+
+  app:
+    build: .
+    depends_on:
+      ollama-pull: { condition: service_completed_successfully }
+    ports: ["8080:8080"]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_REASONING_MODEL: ${OLLAMA_REASONING_MODEL:-llama3.1:8b}
+      OLLAMA_CODER_MODEL: ${OLLAMA_CODER_MODEL:-qwen2.5-coder:7b}
+      SDLC_OUTPUT_DIR: /app/build/sdlc-output
+
+volumes:
+  ollama:

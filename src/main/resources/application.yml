@@ -1,0 +1,107 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: agentic-sdlc-url-shortener
+  datasource:
+    url: jdbc:h2:mem:shortener;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  h2:
+   console:
+   enabled: true
+   path: /h2-console
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none          # Flyway owns the schema (safe, reviewable change management)
+  flyway:
+    enabled: true
+
+  # ---------------------------------------------------------------------------
+  # Spring AI + Ollama (local models, no API key).
+  #   ollama serve
+  #   ollama pull llama3.1:8b && ollama pull qwen2.5-coder:7b
+  # Which model each agent uses is set under sdlc.llm below. If Ollama is not running the app still
+  # starts and every agent runs its deterministic strategy (OLLAMA_ENABLED=false forces that mode).
+  # ---------------------------------------------------------------------------
+  ai:
+    model:
+      chat: ollama
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        pull-model-strategy: ${OLLAMA_PULL_STRATEGY:never}   # never | when_missing | always (needs Ollama up at startup)
+        timeout: 30m
+        chat:
+          additional-models:                                 # pulled together with the default model
+            - ${OLLAMA_CODER_MODEL:qwen2.5-coder:7b}
+      chat:
+        options:
+          model: ${OLLAMA_REASONING_MODEL:llama3.1:8b}       # default; each agent overrides it per request
+          temperature: 0.2
+          num-ctx: 16384        # agents send code + design context; the Ollama default (2048) truncates it
+          keep-alive: 10m       # keep both models warm across a run
+  http:
+    client:
+      read-timeout: ${LLM_READ_TIMEOUT:5m}   # local models can be slow on code generation
+
+shortener:
+  base-url: ${SHORTENER_BASE_URL:http://localhost:8080}
+  code-length: 7
+  max-ttl: 365d
+  blocked-domains: []
+  reserved-aliases: [api, actuator, health, admin, static]
+  client-hash-salt: ${SHORTENER_HASH_SALT:dev-only-salt}
+  rate-limit:
+    capacity: 30
+    refill-per-minute: 30
+
+# Agentic SDLC orchestrator governance knobs
+sdlc:
+  max-implementation-attempts: 3      # bounded retry of implement->validate loop
+  max-replans: 2                      # bounded dynamic re-planning (clarifications / rejections)
+  max-node-executions: 60             # autonomy budget per run (runaway-loop guard)
+  node-retry:
+    max-attempts: 2                   # transient failure retries per agent call before fallback
+    backoff: 200ms
+  design-approval-risk-threshold: HIGH # design gate requires a human at/above this risk
+  source-root: ${SDLC_SOURCE_ROOT:src/main/java/com/example/shortener}   # codebase the brownfield analysis reasons about
+  migrations-root: ${SDLC_MIGRATIONS_ROOT:src/main/resources/db/migration}
+  output-dir: ${SDLC_OUTPUT_DIR:./build/sdlc-output}
+  approvers: [tech-lead, eng-manager, release-manager]
+
+  # Multi-agent model roster: one Spring AI Ollama ChatModel, each agent routed to its own local model.
+  llm:
+    enabled: ${OLLAMA_ENABLED:true}
+    default-model: ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+    structured-output: SCHEMA        # SCHEMA = output record's JSON schema sent as Ollama `format`; JSON = plain JSON mode
+    temperature: 0.2
+    num-ctx: 16384
+    health-cache-ttl: 15s            # Ollama liveness is re-checked at most this often
+    agent-models:                    # keys in [brackets]: Spring's relaxed binding would otherwise drop the '_'
+      "[requirements_analysis]": ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+      "[planning]":          ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+      "[codebase_analysis]": ${OLLAMA_CODER_MODEL:qwen2.5-coder:7b}
+      "[architecture_design]": ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+      "[risk_assessment]":   ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+      "[test_strategy]":     ${OLLAMA_CODER_MODEL:qwen2.5-coder:7b}
+      "[implementation]":    ${OLLAMA_CODER_MODEL:qwen2.5-coder:7b}
+      "[documentation]":     ${OLLAMA_REASONING_MODEL:llama3.1:8b}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.example: INFO
