@@ -114,6 +114,8 @@ REST (SdlcController) ─► SdlcOrchestrator ─► LangGraph4j CompiledGraph<S
 - **Human-in-the-loop** uses LangGraph `interruptBefore` on the three gates plus `updateState` and `GraphInput.resume()`. Approvers must be on an allow-list.
 
 ---
+## Full Execution flow
+<img width="1272" height="1047" alt="image" src="https://github.com/user-attachments/assets/5fc24616-a9d3-487c-8e92-11d4ff580a9b" />
 
 ## API
 
